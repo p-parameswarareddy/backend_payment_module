@@ -59,7 +59,7 @@ def update_payment_status(payment_id, new_status, failure_reason=None):
     with transaction.atomic():
         with get_cursor() as cur:
 
-            # Lock row to prevent concurrent updates
+            
             cur.execute(
                 "SELECT * FROM payments WHERE id = %s FOR UPDATE",
                 [payment_id]
@@ -71,7 +71,7 @@ def update_payment_status(payment_id, new_status, failure_reason=None):
 
             current_status = row["status"]
 
-            # State machine — valid transitions only
+            
             allowed = {
                 "PENDING": {"SUCCESS", "FAILED"},
                 "SUCCESS": {"REFUNDED"},
@@ -91,7 +91,7 @@ def update_payment_status(payment_id, new_status, failure_reason=None):
                 """, [new_status, failure_reason, payment_id])
 
             except pg_errors.UniqueViolation:
-                # ✅ Catches duplicate SUCCESS payment for same order_id
+                
                 raise ValueError(
                     f"Order already has a successful payment. "
                     f"Cannot mark another payment as SUCCESS."
@@ -114,7 +114,7 @@ def create_refund(payment_id, amount_in_subunits, reason=None):
     with transaction.atomic():
         with get_cursor() as cur:
 
-            # Lock payment row
+            
             cur.execute(
                 "SELECT * FROM payments WHERE id = %s FOR UPDATE",
                 [payment_id]
@@ -136,7 +136,7 @@ def create_refund(payment_id, amount_in_subunits, reason=None):
                     f"payment amount {payment['amount_in_subunits']}."
                 )
 
-            # Insert refund row
+            
             cur.execute("""
                 INSERT INTO refunds
                     (id, payment_id, amount_in_subunits, reason, status)
@@ -148,7 +148,7 @@ def create_refund(payment_id, amount_in_subunits, reason=None):
             refund = dict(cur.fetchone())
             refund["amount_in_subunits"] = int(refund["amount_in_subunits"])
 
-            # Mark payment as REFUNDED
+            
             cur.execute("""
                 UPDATE payments SET status = 'REFUNDED'
                 WHERE id = %s

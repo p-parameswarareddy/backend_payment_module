@@ -8,13 +8,13 @@ class PaymentService:
     VALID_NEW_STATUSES = {"SUCCESS", "FAILED"}
 
     def record_payment(self, data):
-        # 1. Required fields
+        
         required = ["order_id", "idempotency_key", "amount_in_subunits", "currency"]
         missing = [f for f in required if not data.get(f)]
         if missing:
             raise ValueError(f"Missing required fields: {', '.join(missing)}")
 
-        # 2. Validate amount
+        
         try:
             amount_in_subunits = int(data["amount_in_subunits"])
         except (ValueError, TypeError):
@@ -22,7 +22,7 @@ class PaymentService:
         if amount_in_subunits <= 0:
             raise ValueError("amount_in_subunits must be greater than zero.")
 
-        # 3. Validate currency
+        
         currency = data["currency"].upper()
         if currency not in self.VALID_CURRENCIES:
             raise ValueError(f"Unsupported currency. Allowed: {sorted(self.VALID_CURRENCIES)}")
@@ -30,16 +30,16 @@ class PaymentService:
         order_id        = str(data["order_id"]).strip()
         idempotency_key = str(data["idempotency_key"]).strip()
 
-        # 4. Idempotency check
+        
         existing = repository.get_payment_by_idempotency_key(idempotency_key)
         if existing:
             return existing, False
 
-        # 5. One SUCCESS per order
+        
         if repository.get_successful_payment_for_order(order_id):
             raise ValueError(f"Order '{order_id}' already has a successful payment.")
 
-        # 6. Create
+        
         try:
             payment = repository.create_payment(
                 order_id=order_id,
@@ -56,7 +56,7 @@ class PaymentService:
         return payment, True
 
     def update_payment_status(self, payment_id, data):
-        # 1. Validate status
+        
         new_status = data.get("status", "").upper()
         if not new_status:
             raise ValueError("'status' field is required.")
@@ -77,7 +77,7 @@ class PaymentService:
         return repository.get_payments_by_order_id(order_id)
 
     def refund_payment(self, payment_id, data):
-        # 1. Validate amount
+        
         raw = data.get("amount_in_subunits")
         if raw is None:
             raise ValueError("'amount_in_subunits' is required for refund.")
