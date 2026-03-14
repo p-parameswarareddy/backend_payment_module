@@ -78,15 +78,15 @@ curl -X POST http://localhost:8000/api/payments/ \\
   }'
 ```
 **Sample Success Response (201):**
-```json
+```
 {
-  \"success\": true,
-  \"message\": \"Payment recorded.\",
-  \"data\": {
-    \"id\": \"uuid-here\",
-    \"status\": \"PENDING\",
-    \"order_id\": \"ORD-123\"
-  }
+  /// \"success\": true,
+  /// \"message\": \"Payment recorded.\",
+  /// \"data\": {
+  ///   \"id\": \"uuid-here\",
+  ///   \"status\": \"PENDING\",
+  ///   \"order_id\": \"ORD-123\"
+  /// }
 }
 ```
 
@@ -106,13 +106,13 @@ curl -X POST http://localhost:8000/api/payments/ \\
 curl http://localhost:8000/api/payments/a1b2c3d4-e5f6-7890-abcd-ef1234567890/
 ```
 **Sample Success Response:**
-```json
+```
 {
-  \"success\": true,
-  \"data\": {
-    \"id\": \"uuid-here\",
-    \"status\": \"SUCCESS\"
-  }
+  /// \"success\": true,
+  /// \"data\": {
+  ///   \"id\": \"uuid-here\",
+  ///   \"status\": \"SUCCESS\"
+  /// }
 }
 ```
 
@@ -136,13 +136,13 @@ curl -X PATCH http://localhost:8000/api/payments/{payment_id}/ \\
   -d '{\"status\": \"SUCCESS\"}'
 ```
 **Sample Success Response:**
-```json
+```
 {
-  \"success\": true,
-  \"message\": \"Payment status updated.\",
-  \"data\": {
-    \"status\": \"SUCCESS\"
-  }
+  /// \"success\": true,
+  /// \"message\": \"Payment status updated.\",
+  /// \"data\": {
+  ///   \"status\": \"SUCCESS\"
+  /// }
 }
 ```
 
@@ -162,14 +162,14 @@ curl -X PATCH http://localhost:8000/api/payments/{payment_id}/ \\
 curl http://localhost:8000/api/orders/ORD-123/payments/
 ```
 **Sample Success Response:**
-```json
+```
 {
-  \"success\": true,
-  \"data\": {
-    \"order_id\": \"ORD-123\",
-    \"count\": 1,
-    \"payments\": [...]
-  }
+  /// \"success\": true,
+  /// \"data\": {
+  ///   \"order_id\": \"ORD-123\",
+  ///   \"count\": 1,
+  ///   \"payments\": [...]
+  /// }
 }
 ```
 
