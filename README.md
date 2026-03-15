@@ -1,471 +1,382 @@
 # Payment Module API
 
-A production-ready **Django + PostgreSQL payments API microservice**.
+A production-ready **Django + PostgreSQL payment microservice** that records payments, prevents duplicate transactions using idempotency, and supports partial refunds.
+
+The service demonstrates real-world backend design concepts used in payment infrastructure such as transactional safety, state machines, and concurrency handling.
 
 ---
 
-# Features
+# Live Deployment
 
-* **Idempotency**: Duplicate requests (same `idempotency_key`) return existing payment
-* **One successful payment per order**: Unique constraint prevents double payment
-* **State machine**: Valid status transitions only
-  `PENDING → SUCCESS/FAILED`
-  `SUCCESS → REFUNDED`
-* **Refunds**: Partial refunds tracked separately, payment marked `REFUNDED`
-* **Row-level locking**: Prevents race conditions during updates
-* **Dict-based results**: Easy JSON serialization
-* **Custom management command**:
+Base URL
 
-  ```bash
-  python manage.py apply_schema
-  ```
+https://backend-payment-module.onrender.com/api/
 
----
+Example
 
-# Database Schema
+GET https://backend-payment-module.onrender.com/api/payments/
 
-## payments table
-
-```
-id                  UUID PK (uuid_generate_v4)
-order_id            VARCHAR(255) NOT NULL
-idempotency_key     VARCHAR(255) NOT NULL UNIQUE
-amount_in_subunits  BIGINT NOT NULL (>0)
-currency            VARCHAR(3) DEFAULT 'INR'
-status              VARCHAR(20) DEFAULT 'PENDING' (PENDING|SUCCESS|FAILED|REFUNDED)
-failure_reason      TEXT
-created_at          TIMESTAMPTZ DEFAULT NOW()
-updated_at          TIMESTAMPTZ DEFAULT NOW()
-```
-
-**Unique index:** One `SUCCESS` payment per `order_id`
-
----
-
-## refunds table
-
-```
-id                  UUID PK
-payment_id          UUID FK → payments
-amount_in_subunits  BIGINT NOT NULL (>0)
-reason              TEXT
-status              VARCHAR(20) DEFAULT 'SUCCESS'
-created_at          TIMESTAMPTZ
-updated_at          TIMESTAMPTZ
-```
-
----
-
-# API Endpoints
-
-All endpoints are under:
-
-```
-/api/
-```
-
-| Method | Endpoint                        | Description                |
-| ------ | ------------------------------- | -------------------------- |
-| POST   | `payments/`                     | Record payment             |
-| GET    | `payments/{payment_id}/`        | Fetch payment              |
-| PATCH  | `payments/{payment_id}/`        | Update payment status      |
-| POST   | `payments/{payment_id}/refund/` | Refund payment             |
-| GET    | `orders/{order_id}/payments/`   | List payments for an order |
-
----
-
-# API Examples (cURL)
-
-These commands can be **directly imported into Postman**.
-
----
-
-# 1. Create Payment
-
-### Endpoint
-
-```
-POST /api/payments/
-```
-
-### Use Cases
-
-* Initiate payment after order placement
-* Retry safely if network fails
-* Record payment before PSP processing
-
-### Status Codes
-
-| Code | Meaning                                               | Success |
-| ---- | ----------------------------------------------------- | ------- |
-| 201  | Payment created                                       | Yes     |
-| 200  | Duplicate idempotency key (existing payment returned) | Yes     |
-| 400  | Invalid JSON                                          | No      |
-| 422  | Validation error                                      | No      |
-| 409  | Order already paid                                    | No      |
-
-### cURL
-
-```bash
-curl -X POST "http://localhost:8000/api/payments/" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "order_id": "ORD-123",
-    "idempotency_key": "idemp-abc123",
-    "amount_in_subunits": 49900,
-    "currency": "INR"
-  }'
-```
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "message": "Payment recorded.",
-  "data": {
-    "id": "uuid-here",
-    "status": "PENDING",
-    "order_id": "ORD-123"
-  }
-}
-```
-
----
-
-# 2. Get Payment
-
-### Endpoint
-
-```
-GET /api/payments/{payment_id}/
-```
-
-### Use Cases
-
-* Check payment status after PSP webhook
-* Frontend polling
-* Admin lookup
-
-### Status Codes
-
-| Code | Meaning           |
-| ---- | ----------------- |
-| 200  | Payment found     |
-| 404  | Payment not found |
-
-### cURL
-
-```bash
-curl "http://localhost:8000/api/payments/a1b2c3d4-e5f6-7890-abcd-ef1234567890/"
-```
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "uuid-here",
-    "status": "SUCCESS"
-  }
-}
-```
-
----
-
-# 3. Update Payment Status
-
-### Endpoint
-
-```
-PATCH /api/payments/{payment_id}/
-```
-
-### Use Cases
-
-* PSP confirms payment
-* PSP declines payment
-* Internal payment processing updates
-
-### Status Codes
-
-| Code | Meaning                  |
-| ---- | ------------------------ |
-| 200  | Status updated           |
-| 400  | Invalid JSON             |
-| 404  | Payment not found        |
-| 422  | Invalid state transition |
-
-### cURL
-
-```bash
-curl -X PATCH "http://localhost:8000/api/payments/{payment_id}/" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "status": "SUCCESS"
-  }'
-```
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "message": "Payment status updated.",
-  "data": {
-    "status": "SUCCESS"
-  }
-}
-```
-
----
-
-# 4. List Payments for Order
-
-### Endpoint
-
-```
-GET /api/orders/{order_id}/payments/
-```
-
-### Use Cases
-
-* Show order payment history
-* Check payment status for order
-* Prevent duplicate payments
-
-### Status Codes
-
-| Code | Meaning          |
-| ---- | ---------------- |
-| 200  | List returned    |
-| 422  | Invalid order id |
-
-### cURL
-
-```bash
-curl "http://localhost:8000/api/orders/ORD-123/payments/"
-```
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "data": {
-    "order_id": "ORD-123",
-    "count": 1,
-    "payments": []
-  }
-}
-```
-
----
-
-# 5. Refund Payment
-
-### Endpoint
-
-```
-POST /api/payments/{payment_id}/refund/
-```
-
-### Use Cases
-
-* Customer refund request
-* Partial order return
-* PSP refund record
-
-### Status Codes
-
-| Code | Meaning               |
-| ---- | --------------------- |
-| 201  | Refund created        |
-| 400  | Invalid JSON          |
-| 404  | Payment not found     |
-| 422  | Invalid refund amount |
-
-### cURL
-
-```bash
-curl -X POST "http://localhost:8000/api/payments/{payment_id}/refund/" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "amount_in_subunits": 20000,
-    "reason": "Customer request"
-  }'
-```
-
-### Success Response
-
-```json
-{
-  "success": true,
-  "message": "Refund successful.",
-  "data": {
-    "id": "refund-uuid"
-  }
-}
-```
-
----
-
-# Architecture
-
-```
-Django REST API
-       ↓
-Services (validation + business logic)
-       ↓
-Repository (transactions + SQL)
-       ↓
-db.py (psycopg2 cursor wrapper)
-       ↓
-PostgreSQL
-```
-
----
-
-# Quick Start
-
-## 1. Setup Virtual Environment
-
-```bash
-python -m venv venv
-```
-
-Activate environment:
-
-**Windows**
-
-```bash
-venv\Scripts\activate
-```
-
-**Linux / Mac**
-
-```bash
-source venv/bin/activate
-```
-
----
-
-## 2. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## 3. PostgreSQL Setup
-
-Create database:
-
-```bash
-createdb payments_db
-```
-
-Or inside PostgreSQL:
-
-```sql
-CREATE DATABASE payments_db;
-```
-
-Database config:
-
-```
-Name: payments_db
-User: postgres
-Password: paramesh
-Port: 5432
-Host: localhost
-```
-
----
-
-## 4. Apply Database Schema
-
-```bash
-python manage.py apply_schema
-```
-
-This creates:
-
-* tables
-* indexes
-* triggers
-* constraints
-
----
-
-## 5. Verify Database (Optional)
-
-```bash
-psql payments_db -c "\dt"
-```
-
----
-
-## 6. Run Server
-
-```bash
-python manage.py runserver
-```
-
-Base API URL:
-
-```
-http://localhost:8000/api/
-```
-
----
-
-# Development Notes
-
-* `models.py` intentionally empty (raw SQL approach)
-* Uses **raw PostgreSQL queries**
-* DRF **APIView** (no serializers or viewsets)
-* Business logic inside `services.py`
-* ACID transactions with **row-level locks**
-
----
-
-# Production Notes
-
-Before deployment:
-
-* Set `DEBUG = False`
-* Change `SECRET_KEY`
-* Configure `ALLOWED_HOSTS`
-* Use **environment variables** for DB credentials
-* Add:
-
-  * authentication
-  * rate limiting
-  * logging
-  * monitoring
-* Consider **pgbouncer** for connection pooling
+Hosted on Render.
 
 ---
 
 # Tech Stack
 
-**Backend**
+Backend
+- Django 5.1.3
+- Django REST Framework
 
-* Django 5.1.3
-* Django REST Framework 3.14+
+Database
+- PostgreSQL
+- psycopg2-binary
 
-**Database**
-
-* PostgreSQL
-* psycopg2-binary
-
-**Extensions**
-
-* `uuid-ossp` for UUID generation
+Other
+- Raw SQL queries
+- UUID primary keys
+- ACID transactions
+- Row-level locking
 
 ---
 
-Built for **production-grade payment infrastructure**.
+# Features
+
+## Idempotency Support
+Duplicate payment requests with the same **idempotency_key** return the existing payment instead of creating a new one.
+
+This prevents duplicate charges during network retries.
+
+## One Successful Payment Per Order
+Multiple payment attempts are allowed for an order, but only **one payment can reach SUCCESS state**.
+
+A database constraint enforces this rule.
+
+## Payment State Machine
+
+Valid status transitions:
+
+PENDING → SUCCESS  
+PENDING → FAILED  
+SUCCESS → REFUNDED
+
+Invalid transitions are rejected.
+
+## Refund Support
+Supports **partial and full refunds**.  
+Refund records are stored in a separate refunds table.
+
+## Concurrency Safety
+Uses **row-level locking and transactions** to prevent race conditions when multiple updates occur simultaneously.
+
+## Clean API Response Structure
+All APIs return a consistent JSON structure.
+
+Success Response
+
+{
+  "success": true,
+  "message": "Optional message",
+  "data": {}
+}
+
+Error Response
+
+{
+  "success": false,
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Description"
+  }
+}
+
+---
+
+# Database Schema
+
+## Payments Table
+
+| Column | Type | Description |
+|------|------|-------------|
+| id | UUID | Primary key |
+| order_id | VARCHAR | Order identifier |
+| idempotency_key | VARCHAR | Prevents duplicate requests |
+| amount_in_subunits | BIGINT | Amount in paise |
+| currency | VARCHAR | Currency code |
+| status | VARCHAR | Payment status |
+| failure_reason | TEXT | Failure reason |
+| created_at | TIMESTAMPTZ | Created timestamp |
+| updated_at | TIMESTAMPTZ | Updated timestamp |
+
+Constraint
+
+Only one **SUCCESS** payment allowed per order_id.
+
+---
+
+## Refunds Table
+
+| Column | Type | Description |
+|------|------|-------------|
+| id | UUID | Refund identifier |
+| payment_id | UUID | Reference to payment |
+| amount_in_subunits | BIGINT | Refund amount |
+| reason | TEXT | Refund reason |
+| status | VARCHAR | Refund status |
+| created_at | TIMESTAMPTZ | Creation time |
+
+---
+
+# API Endpoints
+
+Base Path
+
+/api/
+
+| Method | Endpoint | Description |
+|------|------|-------------|
+| POST | payments/ | Record payment |
+| GET | payments/{payment_id}/ | Fetch payment |
+| PATCH | payments/{payment_id}/ | Update payment status |
+| POST | payments/{payment_id}/refund/ | Refund payment |
+| GET | orders/{order_id}/payments/ | List order payments |
+
+---
+
+# API Examples (cURL)
+
+These examples can be imported into Postman.
+
+## 1 Create Payment
+
+POST /api/payments/
+
+Use Cases
+
+- initiate payment after order placement
+- retry safely after network failure
+- record payment before payment gateway processing
+
+curl -X POST "http://localhost:8000/api/payments/
+"
+-H "Content-Type: application/json"
+-d '{
+"order_id": "ORD-123",
+"idempotency_key": "idemp-abc123",
+"amount_in_subunits": 49900,
+"currency": "INR"
+}'
+
+Success Response
+{
+"success": true,
+"message": "Payment recorded.",
+"data": {
+"id": "uuid-here",
+"status": "PENDING",
+"order_id": "ORD-123"
+}
+} 
+
+---
+
+## 2 Get Payment
+
+GET /api/payments/{payment_id}/
+
+Use Cases
+
+- check payment status
+- frontend polling
+- admin lookup
+curl "http://localhost:8000/api/payments/a1b2c3d4-e5f6-7890-abcd-ef1234567890/"
+
+
+---
+
+## 3 Update Payment Status
+
+PATCH /api/payments/{payment_id}/
+
+Use Cases
+
+- payment gateway confirms success
+- payment gateway declines payment
+curl -X PATCH "http://localhost:8000/api/payments/{payment_id}/
+"
+-H "Content-Type: application/json"
+-d '{
+"status": "SUCCESS"
+}'
+
+
+---
+
+## 4 List Payments for Order
+
+GET /api/orders/{order_id}/payments/
+
+Use Cases
+
+- view order payment history
+- detect duplicate payment attempts
+curl "http://localhost:8000/api/orders/ORD-123/payments/"
+
+
+---
+
+## 5 Refund Payment
+
+POST /api/payments/{payment_id}/refund/
+
+Use Cases
+
+- customer refund request
+- order cancellation
+- partial return
+curl -X POST "http://localhost:8000/api/payments/{payment_id}/refund/"
+-H "Content-Type: application/json"
+-d '{
+"amount_in_subunits": 20000,
+"reason": "Customer request"
+}'
+
+
+---
+
+# Architecture
+
+The service follows a layered architecture separating API, business logic, and database operations.
+
+Django REST API  
+↓  
+Services (validation + business logic)  
+↓  
+Repository (transactions + SQL queries)  
+↓  
+db.py (psycopg2 database wrapper)  
+↓  
+PostgreSQL
+
+This separation improves maintainability and scalability.
+
+---
+
+# Assumptions
+
+1. Each order can have multiple payment attempts but only **one successful payment**.
+
+2. Clients must provide a **unique idempotency_key** for safe retry behavior.
+
+3. Payment amounts are stored in **subunits (paise)** to avoid floating point precision issues.
+
+4. Refunds are allowed **only for successful payments**.
+
+5. Refunds can be **partial or full**, and each refund is stored separately.
+
+6. Payment status must follow valid state transitions.
+
+7. Currency defaults to **INR**.
+
+---
+
+# Quick Start
+
+## 1 Create Virtual Environment
+
+python -m venv venv
+
+Activate
+
+Windows
+
+venv\Scripts\activate
+
+Linux / Mac
+
+source venv/bin/activate
+
+---
+
+## 2 Install Dependencies
+
+pip install -r requirements.txt
+
+---
+
+## 3 Setup PostgreSQL
+
+Create database
+
+CREATE DATABASE payments_db;
+
+Database configuration
+
+Name: payments_db  
+User: postgres  
+Password: postgres  
+Host: localhost  
+Port: 5432  
+
+---
+
+## 4 Apply Database Schema
+
+python manage.py apply_schema
+
+This creates
+
+- tables
+- indexes
+- triggers
+- constraints
+
+---
+
+## 5 Run Server
+
+python manage.py runserver
+
+Base API URL
+
+http://localhost:8000/api/
+
+---
+
+# Project Structure
+
+payment_module/
+
+api/ – REST API views  
+services/ – business logic  
+repository/ – database queries  
+db.py – PostgreSQL connection wrapper  
+management/ – custom management commands  
+
+---
+
+# Development Notes
+
+- models.py intentionally empty (raw SQL approach)
+- Uses raw PostgreSQL queries
+- Business logic inside services.py
+- ACID transactions with row-level locks
+
+---
+
+# Production Notes
+
+Before deploying:
+
+- Set DEBUG = False
+- Configure ALLOWED_HOSTS
+- Use environment variables for database credentials
+
+Recommended improvements
+
+- authentication
+- rate limiting
+- logging
+- monitoring
+- connection pooling (PgBouncer)
+
+---
+
