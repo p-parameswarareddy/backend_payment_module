@@ -186,7 +186,7 @@ frontend polling
 
 admin lookup
 
-curl "http://localhost:8000/api/payments/a1b2c3d4-e5f6-7890-abcd-ef1234567890/"
+curl "http://localhost:8000/api/payments/{payment_id}/"
 
 ---
 
@@ -215,7 +215,7 @@ Use Cases
 
 - view order payment history
 - detect duplicate payment attempts
-curl "http://localhost:8000/api/orders/ORD-123/payments/"
+curl "http://localhost:8000/api/orders/{order_id}/payments/"
 
 
 ---
