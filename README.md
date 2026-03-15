@@ -10,7 +10,7 @@ The service demonstrates real-world backend design concepts used in payment infr
 
 **Base URL**
 
-[https://backend-payment-module.onrender.com/api/](https://backend-payment-module.onrender.com/api/)
+[https://backend-payment-module.onrender.com/](https://backend-payment-module.onrender.com/)
 
 **Example**
 
