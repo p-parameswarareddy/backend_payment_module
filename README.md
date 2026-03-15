@@ -155,40 +155,38 @@ Use Cases
 - retry safely after network failure
 - record payment before payment gateway processing
 
-curl -X POST "http://localhost:8000/api/payments/
-"
--H "Content-Type: application/json"
--d '{
-"order_id": "ORD-123",
-"idempotency_key": "idemp-abc123",
-"amount_in_subunits": 49900,
-"currency": "INR"
-}'
+curl -X POST "http://localhost:8000/api/payments/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "order_id": "ORD-123",
+    "idempotency_key": "idemp-abc123",
+    "amount_in_subunits": 49900,
+    "currency": "INR"
+  }'
 
-Success Response
 {
-"success": true,
-"message": "Payment recorded.",
-"data": {
-"id": "uuid-here",
-"status": "PENDING",
-"order_id": "ORD-123"
+  "success": true,
+  "message": "Payment recorded.",
+  "data": {
+    "id": "uuid-here",
+    "status": "PENDING",
+    "order_id": "ORD-123"
+  }
 }
-} 
-
 ---
 
 ## 2 Get Payment
-
 GET /api/payments/{payment_id}/
 
 Use Cases
 
-- check payment status
-- frontend polling
-- admin lookup
-curl "http://localhost:8000/api/payments/a1b2c3d4-e5f6-7890-abcd-ef1234567890/"
+check payment status
 
+frontend polling
+
+admin lookup
+
+curl "http://localhost:8000/api/payments/a1b2c3d4-e5f6-7890-abcd-ef1234567890/"
 
 ---
 
@@ -200,12 +198,11 @@ Use Cases
 
 - payment gateway confirms success
 - payment gateway declines payment
-curl -X PATCH "http://localhost:8000/api/payments/{payment_id}/
-"
--H "Content-Type: application/json"
--d '{
-"status": "SUCCESS"
-}'
+curl -X PATCH "http://localhost:8000/api/payments/{payment_id}/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "SUCCESS"
+  }'
 
 
 ---
@@ -232,12 +229,12 @@ Use Cases
 - customer refund request
 - order cancellation
 - partial return
-curl -X POST "http://localhost:8000/api/payments/{payment_id}/refund/"
--H "Content-Type: application/json"
--d '{
-"amount_in_subunits": 20000,
-"reason": "Customer request"
-}'
+curl -X POST "http://localhost:8000/api/payments/{payment_id}/refund/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "amount_in_subunits": 20000,
+    "reason": "Customer request"
+  }'
 
 
 ---
